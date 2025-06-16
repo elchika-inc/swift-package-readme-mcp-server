@@ -57,6 +57,7 @@ export interface PackageSearchResult {
   platforms: string[];
   swift_versions: string[];
   stars: number;
+  repository_url: string;
   score: {
     final: number;
     detail: {

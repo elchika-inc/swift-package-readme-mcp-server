@@ -59,5 +59,5 @@ export class ConsoleLogger implements Logger {
 
 // Export a default logger instance
 export const logger = new ConsoleLogger(
-  (process.env.LOG_LEVEL as 'debug' | 'info' | 'warn' | 'error') || 'info'
+  (process.env.LOG_LEVEL as 'debug' | 'info' | 'warn' | 'error') || 'warn'
 );

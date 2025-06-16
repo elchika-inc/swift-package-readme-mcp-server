@@ -45,97 +45,117 @@ export async function searchPackages(params: SearchPackagesParams): Promise<Sear
     // Transform results to our format
     const searchResults: PackageSearchResult[] = [];
     
-    for (const spiResult of spiResults.results) {
-      try {
-        // Get additional details for each package
-        let packageDetails;
+    // Process results in smaller batches to avoid rate limits
+    const batchSize = 5;
+    for (let i = 0; i < spiResults.results.length; i += batchSize) {
+      const batch = spiResults.results.slice(i, i + batchSize);
+      
+      // Process batch in parallel
+      const batchPromises = batch.map(async (spiResult) => {
         try {
-          packageDetails = await swiftPackageIndexApiService.getPackage(
-            spiResult.repositoryOwner,
-            spiResult.repositoryName
-          );
-        } catch (error) {
-          logger.debug('Could not get package details from SPI', {
-            owner: spiResult.repositoryOwner,
-            repo: spiResult.repositoryName,
-          });
-        }
+          // Get additional details for each package (in parallel)
+          const [packageDetails, githubRepo] = await Promise.allSettled([
+            swiftPackageIndexApiService.getPackage(spiResult.repositoryOwner, spiResult.repositoryName),
+            githubApiService.getRepository(spiResult.repositoryOwner, spiResult.repositoryName)
+          ]);
+          
+          const packageDetailsData = packageDetails.status === 'fulfilled' ? packageDetails.value : null;
+          const githubRepoData = githubRepo.status === 'fulfilled' ? githubRepo.value : null;
+          
+          if (packageDetails.status === 'rejected') {
+            logger.debug('Could not get package details from SPI', {
+              owner: spiResult.repositoryOwner,
+              repo: spiResult.repositoryName,
+            });
+          }
+          
+          if (githubRepo.status === 'rejected') {
+            logger.debug('Could not get GitHub repository info', {
+              owner: spiResult.repositoryOwner,
+              repo: spiResult.repositoryName,
+            });
+          }
 
-        // Get GitHub info for additional metrics
-        let githubRepo;
-        try {
-          githubRepo = await githubApiService.getRepository(
-            spiResult.repositoryOwner,
-            spiResult.repositoryName
-          );
-        } catch (error) {
-          logger.debug('Could not get GitHub repository info', {
-            owner: spiResult.repositoryOwner,
-            repo: spiResult.repositoryName,
-          });
-        }
+          // Calculate scores
+          const stars = githubRepoData?.stargazers_count || spiResult.stars || 0;
+          const forks = githubRepoData?.forks_count || 0;
+          const issues = githubRepoData?.open_issues_count || 0;
+          
+          // Simple scoring algorithm (can be improved)
+          const popularityScore = Math.min(1, Math.log10(stars + 1) / 4); // Max score at 10k stars
+          const qualityScore = calculateQualityScore(packageDetailsData, githubRepoData, spiResult);
+          const maintenanceScore = calculateMaintenanceScore(packageDetailsData, githubRepoData, spiResult);
+          const finalScore = (popularityScore + qualityScore + maintenanceScore) / 3;
 
-        // Calculate scores
-        const stars = githubRepo?.stargazers_count || spiResult.stars || 0;
-        const forks = githubRepo?.forks_count || 0;
-        const issues = githubRepo?.open_issues_count || 0;
-        
-        // Simple scoring algorithm (can be improved)
-        const popularityScore = Math.min(1, Math.log10(stars + 1) / 4); // Max score at 10k stars
-        const qualityScore = calculateQualityScore(packageDetails, githubRepo, spiResult);
-        const maintenanceScore = calculateMaintenanceScore(packageDetails, githubRepo, spiResult);
-        const finalScore = (popularityScore + qualityScore + maintenanceScore) / 3;
+          // Apply filters
+          if (params.quality && qualityScore < params.quality) {
+            return null;
+          }
+          if (params.popularity && popularityScore < params.popularity) {
+            return null;
+          }
 
-        // Apply filters
-        if (params.quality && qualityScore < params.quality) {
-          continue;
-        }
-        if (params.popularity && popularityScore < params.popularity) {
-          continue;
-        }
+          // Get platform and Swift version info (only if we have package details)
+          let platforms: string[] = [];
+          let swiftVersions: string[] = [];
+          
+          if (packageDetailsData) {
+            try {
+              const builds = await swiftPackageIndexApiService.getPackageBuilds(
+                spiResult.repositoryOwner,
+                spiResult.repositoryName
+              );
+              platforms = builds.platforms;
+              swiftVersions = builds.swift_versions;
+            } catch (error) {
+              logger.debug('Could not get build info', { 
+                owner: spiResult.repositoryOwner,
+                repo: spiResult.repositoryName
+              });
+            }
+          }
 
-        // Get platform and Swift version info
-        let platforms: string[] = [];
-        let swiftVersions: string[] = [];
-        
-        if (packageDetails) {
-          const builds = await swiftPackageIndexApiService.getPackageBuilds(
-            spiResult.repositoryOwner,
-            spiResult.repositoryName
-          );
-          platforms = builds.platforms;
-          swiftVersions = builds.swift_versions;
-        }
-
-        const searchResult: PackageSearchResult = {
-          name: spiResult.packageName,
-          version: packageDetails?.latest_version || 'unknown',
-          description: spiResult.summary || githubRepo?.description || '',
-          summary: spiResult.summary,
-          keywords: spiResult.keywords || githubRepo?.topics || [],
-          author: spiResult.repositoryOwner,
-          license: packageDetails?.license_name || githubRepo?.license?.name || 'Unknown',
-          platforms,
-          swift_versions: swiftVersions,
-          stars,
-          score: {
-            final: finalScore,
-            detail: {
-              quality: qualityScore,
-              popularity: popularityScore,
-              maintenance: maintenanceScore,
+          const searchResult: PackageSearchResult = {
+            name: spiResult.packageName,
+            version: packageDetailsData?.latest_version || 'unknown',
+            description: spiResult.summary || githubRepoData?.description || '',
+            summary: spiResult.summary,
+            keywords: spiResult.keywords || githubRepoData?.topics || [],
+            author: spiResult.repositoryOwner,
+            license: packageDetailsData?.license_name || githubRepoData?.license?.name || 'Unknown',
+            platforms,
+            swift_versions: swiftVersions,
+            stars,
+            repository_url: `https://github.com/${spiResult.repositoryOwner}/${spiResult.repositoryName}`,
+            score: {
+              final: finalScore,
+              detail: {
+                quality: qualityScore,
+                popularity: popularityScore,
+                maintenance: maintenanceScore,
+              },
             },
-          },
-          searchScore: 1.0, // Swift Package Index doesn't provide search scores
-        };
+            searchScore: 1.0, // Swift Package Index doesn't provide search scores
+          };
 
-        searchResults.push(searchResult);
-      } catch (error) {
-        logger.warn('Failed to process search result', {
-          packageName: spiResult.packageName,
-          error,
-        });
-        // Continue with other results
+          return searchResult;
+        } catch (error) {
+          logger.warn('Failed to process search result', {
+            packageName: spiResult.packageName,
+            error,
+          });
+          return null;
+        }
+      });
+      
+      // Wait for batch to complete and collect results
+      const batchResults = await Promise.all(batchPromises);
+      const validResults = batchResults.filter(result => result !== null);
+      searchResults.push(...validResults);
+      
+      // Add small delay between batches to be nice to APIs
+      if (i + batchSize < spiResults.results.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
 
