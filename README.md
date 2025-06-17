@@ -1,5 +1,11 @@
 # Swift Package README MCP Server
 
+[![npm version](https://img.shields.io/npm/v/swift-package-readme-mcp-server)](https://www.npmjs.com/package/swift-package-readme-mcp-server)
+[![npm downloads](https://img.shields.io/npm/dm/swift-package-readme-mcp-server)](https://www.npmjs.com/package/swift-package-readme-mcp-server)
+[![GitHub stars](https://img.shields.io/github/stars/naoto24kawa/package-readme-mcp-servers)](https://github.com/naoto24kawa/package-readme-mcp-servers)
+[![GitHub issues](https://img.shields.io/github/issues/naoto24kawa/package-readme-mcp-servers)](https://github.com/naoto24kawa/package-readme-mcp-servers/issues)
+[![license](https://img.shields.io/npm/l/swift-package-readme-mcp-server)](https://github.com/naoto24kawa/package-readme-mcp-servers/blob/main/LICENSE)
+
 A Model Context Protocol (MCP) server for fetching Swift Package Manager package README files and usage information from Swift Package Index and GitHub.
 
 ## Features
@@ -177,6 +183,15 @@ MIT
 5. Submit a pull request
 
 ## Changelog
+
+### v0.1.2
+- Added comprehensive badges section to README
+- Updated documentation with npm, GitHub stars, and issues badges
+
+### v0.1.1
+- Bug fixes and stability improvements
+- Enhanced error handling and logging
+- Performance optimizations
 
 ### v0.1.0
 - Initial implementation
