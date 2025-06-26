@@ -1,78 +1,49 @@
 # Swift Package README MCP Server
 
+[![license](https://img.shields.io/npm/l/swift-package-readme-mcp-server)](https://github.com/elchika-inc/swift-package-readme-mcp-server/blob/main/LICENSE)
 [![npm version](https://img.shields.io/npm/v/swift-package-readme-mcp-server)](https://www.npmjs.com/package/swift-package-readme-mcp-server)
 [![npm downloads](https://img.shields.io/npm/dm/swift-package-readme-mcp-server)](https://www.npmjs.com/package/swift-package-readme-mcp-server)
-[![GitHub stars](https://img.shields.io/github/stars/naoto24kawa/package-readme-mcp-servers)](https://github.com/naoto24kawa/package-readme-mcp-servers)
-[![GitHub issues](https://img.shields.io/github/issues/naoto24kawa/package-readme-mcp-servers)](https://github.com/naoto24kawa/package-readme-mcp-servers/issues)
-[![license](https://img.shields.io/npm/l/swift-package-readme-mcp-server)](https://github.com/naoto24kawa/package-readme-mcp-servers/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/elchika-inc/swift-package-readme-mcp-server)](https://github.com/elchika-inc/swift-package-readme-mcp-server)
 
-A Model Context Protocol (MCP) server for fetching Swift Package Manager package README files and usage information from Swift Package Index and GitHub.
+An MCP (Model Context Protocol) server that enables AI assistants to fetch comprehensive information about Swift packages from Swift Package Index, including README content, package metadata, and search functionality.
 
 ## Features
 
-- **Package README Retrieval**: Fetch README content and extract usage examples
-- **Package Information**: Get basic package info, dependencies, and metadata
-- **Package Search**: Search for Swift packages with filtering options
-- **Smart Caching**: Memory-based caching with TTL and LRU eviction
-- **Multiple Sources**: Uses both Swift Package Index and GitHub APIs
-- **Robust Error Handling**: Comprehensive error handling with retry logic
+- **Package README Retrieval**: Fetch formatted README content with usage examples from Swift Package Manager packages hosted on Swift Package Index
+- **Package Information**: Get comprehensive package metadata including dependencies, versions, statistics, and maintainer information
+- **Package Search**: Search Swift Package Index with advanced filtering by platform, popularity, and relevance
+- **Smart Caching**: Intelligent caching system to optimize API usage and improve response times
+- **GitHub Integration**: Seamless integration with GitHub API for enhanced README fetching when packages link to GitHub repositories
+- **Error Handling**: Robust error handling with automatic retry logic and fallback strategies
 
-## Installation
+## MCP Client Configuration
 
-```bash
-npm install
-npm run build
-```
-
-## Usage
-
-### As an MCP Server
-
-Add to your MCP client configuration:
+Add this server to your MCP client configuration:
 
 ```json
 {
   "mcpServers": {
     "swift-package-readme": {
-      "command": "node",
-      "args": ["/path/to/swift-package-readme-mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": ["swift-package-readme-mcp-server"],
       "env": {
-        "GITHUB_TOKEN": "your-github-token-here"
+        "GITHUB_TOKEN": "your_github_token_here"
       }
     }
   }
 }
 ```
 
-### Development
-
-```bash
-# Development mode
-npm run dev
-
-# Type checking
-npm run typecheck
-
-# Linting
-npm run lint
-
-# Testing
-npm test
-```
+> **Note**: The `GITHUB_TOKEN` is optional but recommended for higher API rate limits when fetching README content from GitHub.
 
 ## Available Tools
 
 ### get_package_readme
 
-Retrieves package README content and extracts usage examples.
+Retrieves comprehensive README content and usage examples for Swift packages.
 
 **Parameters:**
-- `package_name` (required): Package name, GitHub URL, or owner/repo format
-- `version` (optional): Package version (default: "latest")
-- `include_examples` (optional): Whether to include usage examples (default: true)
-
-**Example:**
-```typescript
+```json
 {
   "package_name": "https://github.com/Alamofire/Alamofire",
   "version": "latest",
@@ -80,121 +51,60 @@ Retrieves package README content and extracts usage examples.
 }
 ```
 
+- `package_name` (string, required): Swift package URL or name
+- `version` (string, optional): Specific package version or "latest" (default: "latest")
+- `include_examples` (boolean, optional): Include usage examples and code snippets (default: true)
+
+**Returns:** Formatted README content with installation instructions, usage examples, and API documentation.
+
 ### get_package_info
 
-Retrieves basic package information and dependencies.
+Fetches detailed package metadata, dependencies, and statistics from Swift Package Index.
 
 **Parameters:**
-- `package_name` (required): Package name, GitHub URL, or owner/repo format
-- `include_dependencies` (optional): Include dependencies (default: true)
-- `include_dev_dependencies` (optional): Include dev dependencies (default: false)
-
-**Example:**
-```typescript
+```json
 {
   "package_name": "Alamofire/Alamofire",
-  "include_dependencies": true
+  "include_dependencies": true,
+  "include_dev_dependencies": false
 }
 ```
+
+- `package_name` (string, required): Swift package name
+- `include_dependencies` (boolean, optional): Include runtime dependencies (default: true)
+- `include_dev_dependencies` (boolean, optional): Include development dependencies (default: false)
+
+**Returns:** Package metadata including version info, maintainers, license, platform support, and dependency tree.
 
 ### search_packages
 
-Searches for Swift packages in Swift Package Index.
+Searches Swift Package Index for packages with advanced filtering capabilities.
 
 **Parameters:**
-- `query` (required): Search query
-- `limit` (optional): Maximum results (default: 20, max: 250)
-- `quality` (optional): Minimum quality score (0-1)
-- `popularity` (optional): Minimum popularity score (0-1)
-
-**Example:**
-```typescript
+```json
 {
-  "query": "networking",
-  "limit": 10,
-  "quality": 0.7
+  "query": "networking http",
+  "limit": 20,
+  "quality": 0.8
 }
 ```
 
-## Configuration
+- `query` (string, required): Search terms (package name, description, keywords)
+- `limit` (number, optional): Maximum number of results to return (default: 20, max: 250)
+- `quality` (number, optional): Minimum quality score filter (0-1)
 
-### Environment Variables
+**Returns:** List of matching packages with names, descriptions, platform support, and relevance scores.
 
-- `GITHUB_TOKEN`: GitHub Personal Access Token (optional but recommended)
-- `LOG_LEVEL`: Logging level (debug, info, warn, error) - default: info
-- `CACHE_TTL`: Cache TTL in seconds - default: 3600
-- `CACHE_MAX_SIZE`: Cache max size in bytes - default: 104857600 (100MB)
-- `REQUEST_TIMEOUT`: Request timeout in milliseconds - default: 30000
+## Error Handling
 
-### Package Name Formats
+The server handles common error scenarios gracefully:
 
-The server accepts packages in multiple formats:
-
-1. **GitHub URLs**: `https://github.com/Alamofire/Alamofire`
-2. **Owner/Repo**: `Alamofire/Alamofire`
-3. **Package Names**: Resolved through Swift Package Index
-
-## Architecture
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   MCP Client    │───▶│swift-package-   │───▶│Swift Package    │
-│   (Claude等)    │    │  readme Server  │    │    Index API    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                                │
-                                ▼
-                       ┌─────────────────┐
-                       │   GitHub API    │
-                       │  (Fallback)     │
-                       └─────────────────┘
-```
-
-## Implementation Details
-
-### Caching Strategy
-
-- **Memory Cache**: LRU cache with TTL
-- **Package Info Cache**: 1 hour TTL
-- **README Cache**: 30 minutes TTL
-- **Search Cache**: 30 minutes TTL
-
-### Error Handling
-
-- **Automatic Retry**: Exponential backoff for transient errors
-- **Rate Limit Handling**: Respects API rate limits with backoff
-- **Graceful Degradation**: Falls back to GitHub when Swift Package Index is unavailable
-
-### Data Sources
-
-1. **Swift Package Index**: Primary source for package metadata and search
-2. **GitHub API**: README content, releases, repository information
-3. **Package.swift**: Dependency information parsing
+- **Package not found**: Returns clear error messages with package name suggestions
+- **Rate limiting**: Implements automatic retry with exponential backoff
+- **Network timeouts**: Configurable timeout with retry logic
+- **Invalid package names**: Validates package name format and provides guidance
+- **GitHub API failures**: Fallback strategies when GitHub integration fails
 
 ## License
 
 MIT
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## Changelog
-
-### v0.1.2
-- Added comprehensive badges section to README
-- Updated documentation with npm, GitHub stars, and issues badges
-
-### v0.1.1
-- Bug fixes and stability improvements
-- Enhanced error handling and logging
-- Performance optimizations
-
-### v0.1.0
-- Initial implementation
-- Support for Swift Package Index and GitHub APIs
-- README parsing and usage example extraction
-- Comprehensive caching and error handling
