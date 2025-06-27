@@ -1,26 +1,23 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
+import { 
+  BasePackageServer, 
+  ToolDefinition 
+} from '@elchika-inc/package-readme-shared';
+import { 
   ErrorCode,
-  ListPromptsRequestSchema,
-  ListResourcesRequestSchema,
-  ListToolsRequestSchema,
-  McpError,
+  McpError
 } from '@modelcontextprotocol/sdk/types.js';
-
-import { logger } from './utils/logger.js';
 import { getPackageReadme } from './tools/get-package-readme.js';
 import { getPackageInfo } from './tools/get-package-info.js';
 import { searchPackages } from './tools/search-packages.js';
-import type {
+import { logger } from './utils/logger.js';
+import {
   GetPackageReadmeParams,
   GetPackageInfoParams,
   SearchPackagesParams,
   PackageReadmeMcpError,
 } from './types/index.js';
 
-const TOOL_DEFINITIONS = {
+const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
   get_readme_from_swift: {
     name: 'get_readme_from_swift',
     description: 'Get Swift package README and usage examples from Swift Package Index and GitHub',
@@ -104,96 +101,38 @@ const TOOL_DEFINITIONS = {
   },
 } as const;
 
-export class SwiftPackageReadmeMcpServer {
-  private server: Server;
-
+export class SwiftPackageReadmeMcpServer extends BasePackageServer {
   constructor() {
-    this.server = new Server(
-      {
-        name: 'swift-package-readme-mcp',
-        version: '1.0.0',
-      },
-      {
-        capabilities: {
-          tools: {},
-          prompts: {},
-          resources: {}
-        }
-      }
-    );
-
-    this.setupHandlers();
+    super({
+      name: 'swift-package-readme-mcp',
+      version: '1.0.0',
+    });
   }
 
-  private setupHandlers(): void {
-    // List available tools
-    (this.server as any).setRequestHandler(ListToolsRequestSchema, async () => {
-      return {
-        tools: Object.values(TOOL_DEFINITIONS),
+  protected getToolDefinitions(): Record<string, ToolDefinition> {
+    return TOOL_DEFINITIONS;
+  }
+
+  protected async handleToolCall(name: string, args: unknown): Promise<unknown> {
+    try {
+      switch (name) {
+        case 'get_readme_from_swift':
+          return await getPackageReadme(this.validateGetPackageReadmeParams(args));
+        
+        case 'get_package_info_from_swift':
+          return await getPackageInfo(this.validateGetPackageInfoParams(args));
+        
+        case 'search_packages_from_swift':
+          return await searchPackages(this.validateSearchPackagesParams(args));
+        
+        default:
+          throw new Error(`Unknown tool: ${name}`);
       }
-    });
-
-    // Handle prompts list
-    (this.server as any).setRequestHandler(ListPromptsRequestSchema, async () => {
-      return { prompts: [] };
-    });
-
-    // Handle resources list
-    (this.server as any).setRequestHandler(ListResourcesRequestSchema, async () => {
-      return { resources: [] };
-    });
-
-    // Handle tool calls
-    (this.server as any).setRequestHandler(CallToolRequestSchema, async (request: any, _extra: any) => {
-      const { name, arguments: args } = request.params;
-
-      try {
-        // Validate that args is an object
-        if (!args || typeof args !== 'object') {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            'Tool arguments must be an object'
-          );
-        }
-
-        switch (name) {
-          case 'get_readme_from_swift':
-            return await this.handleGetPackageReadme(this.validateGetPackageReadmeParams(args));
-          
-          case 'get_package_info_from_swift':
-            return await this.handleGetPackageInfo(this.validateGetPackageInfoParams(args));
-          
-          case 'search_packages_from_swift':
-            return await this.handleSearchPackages(this.validateSearchPackagesParams(args));
-          
-          default:
-            throw new McpError(
-              ErrorCode.MethodNotFound,
-              `Unknown tool: ${name}`
-            );
-        }
-      } catch (error) {
-        logger.error(`Tool execution failed: ${name}`, { error, args });
-        
-        if (error instanceof Error && error.name === 'PackageReadmeMcpError') {
-          const mcpError = error as PackageReadmeMcpError;
-          throw new McpError(
-            this.mapErrorCode(mcpError.code),
-            mcpError.message,
-            mcpError.details
-          );
-        }
-        
-        if (error instanceof McpError) {
-          throw error;
-        }
-        
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Internal error: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    });
+    } catch (error) {
+      // Log error for debugging but let the base class handle MCP error formatting
+      logger.error(`Tool execution failed: ${name}`, { error });
+      throw error;
+    }
   }
 
   private validateGetPackageReadmeParams(args: unknown): GetPackageReadmeParams {
@@ -244,17 +183,6 @@ export class SwiftPackageReadmeMcpServer {
     return result;
   }
 
-  private async handleGetPackageReadme(params: GetPackageReadmeParams) {
-    const result = await getPackageReadme(params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2)
-        }
-      ]
-    };
-  }
 
   private validateGetPackageInfoParams(args: unknown): GetPackageInfoParams {
     if (!args || typeof args !== 'object') {
@@ -304,17 +232,6 @@ export class SwiftPackageReadmeMcpServer {
     return result;
   }
 
-  private async handleGetPackageInfo(params: GetPackageInfoParams) {
-    const result = await getPackageInfo(params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2)
-        }
-      ]
-    };
-  }
 
   private validateSearchPackagesParams(args: unknown): SearchPackagesParams {
     if (!args || typeof args !== 'object') {
@@ -381,52 +298,6 @@ export class SwiftPackageReadmeMcpServer {
     return result;
   }
 
-  private async handleSearchPackages(params: SearchPackagesParams) {
-    const result = await searchPackages(params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2)
-        }
-      ]
-    };
-  }
-
-  private mapErrorCode(code: string): ErrorCode {
-    switch (code) {
-      case 'PACKAGE_NOT_FOUND':
-      case 'VERSION_NOT_FOUND':
-        return ErrorCode.InvalidRequest;
-      case 'INVALID_PACKAGE_NAME':
-      case 'INVALID_VERSION':
-      case 'INVALID_SEARCH_QUERY':
-      case 'INVALID_LIMIT':
-      case 'INVALID_SCORE':
-      case 'VALIDATION_ERROR':
-        return ErrorCode.InvalidParams;
-      case 'RATE_LIMIT_EXCEEDED':
-        return ErrorCode.InternalError; // Could be a custom error code
-      case 'NETWORK_ERROR':
-        return ErrorCode.InternalError;
-      default:
-        return ErrorCode.InternalError;
-    }
-  }
-
-  async run(): Promise<void> {
-    try {
-      const transport = new StdioServerTransport();
-      await (this.server as any).connect(transport);
-    } catch (error) {
-      logger.error('Failed to start server transport', { error });
-      throw error;
-    }
-  }
-
-  async stop(): Promise<void> {
-    await (this.server as any).close();
-  }
 }
 
 export default SwiftPackageReadmeMcpServer;
