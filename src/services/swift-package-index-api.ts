@@ -8,10 +8,14 @@ import type {
 import { ErrorHandler } from '../utils/error-handler.js';
 import { logger } from '../utils/logger.js';
 import { cacheManager } from './cache.js';
+import { DEFAULT_CONFIG } from '../config/defaults.js';
 
 export class SwiftPackageIndexApiService {
-  private readonly baseUrl = 'https://swiftpackageindex.com/api';
-  private readonly requestTimeout = parseInt(process.env.REQUEST_TIMEOUT || '30000', 10);
+  private readonly baseUrl = DEFAULT_CONFIG.API.BASE_URLS.SWIFT_PACKAGE_INDEX;
+  private readonly requestTimeout = parseInt(
+    process.env.REQUEST_TIMEOUT || DEFAULT_CONFIG.REQUEST_TIMEOUT.toString(), 
+    10
+  );
 
   private async makeRequest<T>(
     endpoint: string,
@@ -20,7 +24,7 @@ export class SwiftPackageIndexApiService {
     const url = `${this.baseUrl}${endpoint}`;
     const headers: Record<string, string> = {
       'Accept': 'application/json',
-      'User-Agent': 'swift-package-readme-mcp-server',
+      'User-Agent': DEFAULT_CONFIG.API.USER_AGENT,
       ...(options.headers ? options.headers as Record<string, string> : {}),
     };
 
@@ -93,15 +97,15 @@ export class SwiftPackageIndexApiService {
       () => this.makeRequest<SwiftPackageIndexPackage>(`/packages/${owner}/${repo}`)
     );
 
-    // Cache for 1 hour
-    cacheManager.setGeneral(cacheKey, packageData, 3600);
+    // Cache for configured duration
+    cacheManager.setGeneral(cacheKey, packageData, DEFAULT_CONFIG.CACHE_TTL.PACKAGE_INFO);
 
     return packageData;
   }
 
   async searchPackages(
     query: string,
-    limit: number = 20
+    limit: number = DEFAULT_CONFIG.SEARCH.DEFAULT_LIMIT
   ): Promise<SwiftPackageIndexSearchResponse> {
     const queryHash = cacheManager.createQueryHash(query, { limit });
     const cached = cacheManager.getSearchResults<SwiftPackageIndexSearchResponse>(queryHash, limit);
@@ -127,7 +131,7 @@ export class SwiftPackageIndexApiService {
       searchResults.results = searchResults.results.slice(0, limit);
     }
 
-    // Cache for 30 minutes
+    // Cache for configured duration
     cacheManager.setSearchResults(queryHash, limit, searchResults);
 
     return searchResults;
@@ -179,8 +183,8 @@ export class SwiftPackageIndexApiService {
         platforms: this.extractPlatforms(packageData),
       };
 
-      // Cache for 1 hour
-      cacheManager.setGeneral(cacheKey, result, 3600);
+      // Cache for configured duration
+      cacheManager.setGeneral(cacheKey, result, DEFAULT_CONFIG.CACHE_TTL.BUILDS);
 
       return result;
     } catch (error) {
@@ -222,42 +226,6 @@ export class SwiftPackageIndexApiService {
     return platforms;
   }
 
-  // Method to get trending/popular packages
-  async getTrendingPackages(limit: number = 20): Promise<SwiftPackageIndexSearchResponse> {
-    const cacheKey = `spi_trending:${limit}`;
-    const cached = cacheManager.getGeneral<SwiftPackageIndexSearchResponse>(cacheKey);
-    
-    if (cached) {
-      logger.debug('Trending packages cache hit', { limit });
-      return cached;
-    }
-
-    logger.info('Fetching trending packages from Swift Package Index', { limit });
-
-    // Since there's no specific trending endpoint, we'll search for popular Swift-related terms
-    const trendingSearches = ['swiftui', 'networking', 'json', 'animation', 'core data'];
-    const randomTerm = trendingSearches[Math.floor(Math.random() * trendingSearches.length)];
-    
-    const trendingResults = await this.searchPackages(randomTerm, limit);
-
-    // Cache for 1 hour
-    cacheManager.setGeneral(cacheKey, trendingResults, 3600);
-
-    return trendingResults;
-  }
-
-  // Helper method to check if a package exists
-  async packageExists(owner: string, repo: string): Promise<boolean> {
-    try {
-      await this.getPackage(owner, repo);
-      return true;
-    } catch (error) {
-      if (error && typeof error === 'object' && 'statusCode' in error && error.statusCode === 404) {
-        return false;
-      }
-      throw error;
-    }
-  }
 }
 
 // Export a singleton instance
